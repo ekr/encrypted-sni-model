@@ -162,11 +162,11 @@ We capture this definition in the following {\sf NameGame}, which is defined in 
 
 We say that \adv\ wins $\mathsf{NameGame}$ if it outputs $1$, i.e., if \adv\ was able to determine distinguish 
 two handshakes using the same ESNI (or not). We define the advantage \adv\ has in this game as
-$|\Pr[\mathsf{ESNIGame}(\lambda, \mathbf{N}, \mathsf{config}, \madv)] - \frac{1}{2}|$. That is, 
+$|\Pr[\mathsf{NameGame}(\lambda, \mathbf{N}, \mathbf{CC}, \mathbf{SC}, \madv)] - \frac{1}{2}|$. That is, 
 the probability that \adv\ guesses $b$ correctly less the probability that it guesses incorrectly. 
 
 We say that a handshake trace is \emph{SNI agnostic} if, for all PPT adversaries \adv, \adv's advantage in 
-winning $\mathsf{ESNIGame}$ is negligibly small in $\lambda$. 
+winning $\mathsf{NameGame}$ is negligibly small in $\lambda$. 
 
 %%% Required property:
 % - All input to the server [ClientParams()] is bound to ESNI // In the active case, adversary can take output of ClientHelloGen and produce its own CH, which is input to the server.
@@ -175,19 +175,23 @@ winning $\mathsf{ESNIGame}$ is negligibly small in $\lambda$.
 \subsection{Active Adversary}
 
 An active adversary has the ability to generate handshake traces at will. We assume servers are neither malicious nor compromised. 
-Therefore, adapting our model for privacy requires extending $\mathsf{ESNIGame}$ to give \adv\ an oracle for producing handshake
+Therefore, adapting our model for privacy requires extending $\mathsf{NameGame}$ to give \adv\ an oracle for producing handshake
 traces with an SNI of its choosing. We define this oracle as $\mathcal{O}_H$, and it takes as input an SNI $N \in \mathbf{N}$
-and returns a handshake trace $H(N) \in \mathbf{H}$. The modified game, called $\mathsf{ActiveESNIGame}$, proceeds as follows:
+and returns a handshake trace $H(N) \in \mathbf{H}$. The modified game, called $\mathsf{ActiveNameGame}$, proceeds as follows:
 
 \begin{algorithm}
-\caption{{\sf ActiveESNIGame}} 
+\caption{{\sf ActiveNameGame}} 
 \label{alg:active-esnigame}
 \begin{algorithmic}[1]
 %   \scriptsize
-  \STATE On input security parameter $\lambda$, $\mathbf{N}$, $\mathsf{config}$, and adversary \adv\, a challenger $C$ initializes \adv\ with $\mathsf{config}$, $\mathsf{N}$, and access to $\mathcal{O}_H$.
-  \STATE \adv\ queries $\mathcal{O}_H$ with SNI values of its choosing from $\mathbf{N}$ at most $\mathsf{poly}(\lambda)$ times.
-  \STATE $C$ chooses a random bit $b$. If $b = 0$, $C$ gives produces a challenge tuple $(H^v(N_0), H^v(N_1))$, where $N_0,N_1 \in \mathbf{N}$ and $N_0 \not= N_1$, and where $H^v(N_0) = (\mathsf{ClientParams}(h^c_0), \mathsf{ServerParams}(\mathsf{Select}(h^c_0, \mathsf{config})), \vec{t})$.
-  Otherwise, $C$ produces challenge tuple $(H^v(N_0), H^v(N_1)$, where $N_0,N_1 \in \mathbf{N}$ and $N_0 \not= N_1$, and both handshake traces are generated as in the other case.
+  \STATE On input security parameter $\lambda$, $\mathbf{N}$, $\mathbf{CC}$, $\mathbf{SC}$, and adversary \adv\, a challenger $C$ initializes \adv\ with $\mathbf{CC}$, $\mathbf{SC}$, $\mathsf{N}$, and access to $\mathcal{O}_H$.
+  \STATE \adv\ queries $\mathcal{O}_H$ with names values of its choosing from $\mathbf{N}$ at most $\mathsf{poly}(\lambda)$ times.
+  \STATE $C$ chooses a random bit $b$. If $b = 0$, $C$ gives produces a challenge tuple
+  $(\mathsf{PublicHandshake(N_0)}, \mathsf{PublicHandshake(N_1)}$, where 
+  $N_0,N_1 \gets \mathbf{N}$ and $N_0 \not= N_1$.
+  Otherwise, $C$ produces challenge tuple 
+  $(\mathsf{PublicHandshake(N_0)}, \mathsf{PublicHandshake(N_1)}$, where 
+  $N_0,N_1 \gets \mathbf{N}$ and $N_0 = N_1$.
   \STATE \adv\ continues querying $\mathcal{O}_H$ at most $\mathsf{poly}(\lambda)$ times.
   \STATE \adv\ replies with a bit $b'$.
   \STATE Output $1$ if $b = b'$, otherwise output $0$.
@@ -197,7 +201,8 @@ and returns a handshake trace $H(N) \in \mathbf{H}$. The modified game, called $
 %% TODO(caw): do we extend adv's capabilities to include those of the CK model for key exchange security? we probably do
 % need to include this, as we don't want the ESNI mechanism to interfere with the secrecy of the session keys.
 
-As before, we say that \adv\ wins $\mathsf{ActiveESNIGame}$ if it outputs $1$. We define the advantage \adv\ has in this game as
+As before, we say that \adv\ wins $\mathsf{ActiveESNIGame}$ if it outputs $1$. 
+We define the advantage \adv\ has in this game as
 $|\Pr[\mathsf{ActiveESNIGame}(\lambda, \mathbf{N}, \mathsf{config}, \madv)] - \frac{1}{2}|$. And we say that a handshake trace
 is \emph{SNI agnostic} with respect to an active attacker if \adv's advantage in winning $\mathsf{ActiveESNIGame}$ is negligibly 
 small in $\lambda$.
@@ -224,10 +229,7 @@ same parties which can decrypt the ESNI, then this type of oracle will always be
 Put differently, if attacker-controlled information can influence the handshake flow for an 
 unknown ESNI, then this type of attack exists.
 
-%%% idea: if ESNI encryption is IND-CPA-secure and cannot be modified, then handshake flow
-% information is determined solely by the contents of that payload
-
-\todo[inline]{Show this type of attack trace}
+\todo[inline]{Draw this attack}
 
 This implies that the ESNI encryption key must cover the resumption ticket. Consequently, 
 since the resumption PSK covers the entire ClientHello, the ESNI key must cover the entire
