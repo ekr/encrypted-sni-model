@@ -7,6 +7,7 @@
 \usepackage{listings}
 \usepackage{url}
 \usepackage{tikz-qtree}
+\usepackage{paralist}
 
 \usepackage{amsmath, amssymb, amsthm, amsfonts, caption, stmaryrd, mathtools, syntax, mdframed}
 
@@ -174,35 +175,70 @@ Optional:
 %** Game-based definition (port)
 \end{comment}
 
+\tableofcontents
+
 \section{Introduction}
 
-\todo[inline]{writeme}
+The TLS Server Name Indication extension \cite{xxx} is an increasingly important part of the TLS protocol.
+Modern TLS server deployments often offer multiple certificates behind a single IP address. The SNI helps
+servers choose which certificate to choose for a given connection. However, this extension also leaks the 
+server name to any on-path observer. With recent pushes to encrypt DNS and protect names from such adversaries,
+the SNI extension is a privacy problem for clients. The Encrypted SNI extension \cite{ietf-tls-esni-04} attempts
+to address this privacy problem by encrypting the SNI in transit. However, to date, asserting correctness and
+privacy properties of the protocol proved difficult. 
 
-\section{Encrypted SNI}
+\textbf{Formal Analysis.} \todo[inline]{writeme}
 
-%% XXX: outline use cases
+\textbf{Our Contributions.} \todo[inline]{writeme}
+
+\section{Encrypted SNI Overview}
+
 %% XXX: misconfigurations where use of public name goes to a server that does not negotiate ESNI but does offer a certificate that terminates to the public name
 %% XXX: draw figures of deployment scenarios
 
-There are several operational goals for Encrypted SNI \cite{requirements}, described below:
+Encrypted SNI is a tool for hiding server names from network connections. There are several operational goals 
+for Encrypted SNI \cite{requirements}, described below:
 %
-\begin{itemize}
-  \item Work with non-ESNI servers to avoid fallback.
-  \item Mitigate replay attacks:
-  \item Avoid widely-deployed shared secrets: 
-  \item Prevent SNI-based DoS attacks:
-  \item Do not stick out:
-  \item Forward secrecy:
-  \item Proper security context:
-  \item Split server spoofing:
-  \item Multiple protocol support:
-\end{itemize}
+\begin{compactitem}
+  \item Avoid widely-deployed shared secrets: One approach to the problem would be for all
+  clients and servers to share a secret that encrypts (and decrypts) the SNI. However, any 
+  client in this set of trusted peers could then decrypt the SNI of others. Moreover, compromise
+  of any node in possession of the secret puts all members at risk. Thus, ESNI requires 
+  public key encryption.
+  \item Work with non-ESNI servers to avoid fallback: Without the need for fallback, ESNI 
+  is a simple ECIES-like protocol, wherein the SNI is encrypted under a public key of the 
+  service provider.
+  \item Do not introduce extra round trips: Encrypting the SNI must not come at the cost of 
+  extra round trips. For example, one possible approach is to SNI-based certificate authentication
+  at the application protocol layer, e.g., using HTTP/2 Secondary Certificates \cite{xxx}, after
+  the TLS connection finishes and is authenticated with a ``public name.'' While this may work,
+  the extra latency cost may be prohibitvely expensive for certain clients.
+  \item Forward secrecy: Ideally, SNI encryption would have some amount of forward secrecy.
+  However, as SNI encryption cannot introduce additional round trips, forward secrecy is not
+  possible using public key encryption primitives such as ECIES \cite{XXX} or HPKE \cite{XXX}
+  \item Prevent SNI-based DoS attacks: A consequence of using public key encryption is that
+  servers must perform a public key operation without having validated the client. HelloRetryRequests
+  may help dampen the effects of DoS attacks, though these come at the cost of introducing
+  additional complexity into the protocol. See Section \ref{sec:security} for more details.
+  \item Mitigate replay attacks: Encrypted SNI values must not be replayable from one 
+  ClientHello to another, otherwise an attacker could use an ESNI value from a victim client
+  message in its own ClientHello.
+  \item Support shared and split mode: Client-facing servers which use the SNI to determine 
+  the target service may not be the entity which terminates the TLS connection. ESNI should therefore
+  support proxies which route TLS connections to backend or origin services. This suggests two
+  possible deployment models for ESNI, referred to as shared and split mode, shown in Figure \ref{fig:modes}.
+  %\item Do not stick out: 
+  %\item Proper security context: 
+  %\item Split server spoofing:
+\end{compactitem}
 %
+
+XXX: mode figure
 
 \subsection{Draft-04 Design Overview}
 XXX: include figure of the protocol
 
-\subsection{Security and Privacy Goals}
+\subsection{Security and Privacy Goals} \label{sec:security}
 ESNI assumes a standard active and on-path Dolev-Yao attacker that can arbitrarily drop, tamper, 
 replay, and forward messages from clients. Fundamentally, a TLS handshake that negotiates ESNI should 
 leak no more information than one which did not negotiate ESNI in the presence of this adversary. 
@@ -241,9 +277,9 @@ Despite this fix, draft-04 of ESNI does not achieve the necessary requirements s
 illustrate some more attacks on the protocol.
 
 \begin{description}
-  \item[Probing Attacks]: Differences in service configurations can leak information.
-  \item[HelloRetryRequest Mix and Match]: Attacker-chosen key share, client-chosen SNI.
-  \item[Server Reaction Attacks]: Use ticket and server reaction for dictionary attack.
+  \item[Probing Attacks]: Differences in service configurations can leak information. % XXX: rewrite using mcs
+  \item[HelloRetryRequest Mix and Match]: Attacker-chosen key share, client-chosen SNI. % XXX: rewrite using mcs
+  \item[Server Reaction Attacks]: Use ticket and server reaction for dictionary attack. % XXX: rewrite using mcs
 \end{description}
 
 The number of edge cases makes it clear that a formal model of the protocol is needed.
@@ -316,6 +352,8 @@ reaction attack vanishes.
 
 As another example, consider the certificate-based client reaction attack. \todo[inline]{finishme}
 
+\subsection{Necessary Properties}
+
 Joint binding of these secrets yields the following properties:
 %
 \begin{itemize}
@@ -332,23 +370,53 @@ As a consequence of forward binding and the need to interoperate with ESNI-incap
 a signalling mechanism for clients to determine whether or not the ESNI contents were used to protect the 
 handshake secret. (Trial decryption is always an option, though other more practical solutions exist.)
 
-\todo[inline]{writeme}
+Beyond these critical properties, it must also be the case that observable information, which includes 
+messages sent on the wire and the \emph{actions} of clients and servers using ESNI, does not leak information
+about the SNI. Indeed, the reaction attack described above was due in part to such an information 
+leak.\footnote{Fortunately, joint binding resolved the problem by removing a branch in the way servers
+handle ClientHello messages.} We must capture this notion of information indistinguishability for completeness.
+We do so via \emph{message indistinguishability} and \emph{action indistinguishability}. Informally, message 
+indistinguishability means that all messages written on the wire do not vary based on SNI. Similarly, action
+indistinguishability means that all node behavior as observed by \adv\ does not vary based on SNI (or any SNI-influenced
+value used in the protocol).
 
-\subsection{Protocol Model}
+\todo[inline]{add more rigorous definition of these}
+\todo[inline]{describe how message indistinguishability is a property of configuration, and give the functions discussed IRL}
 
-- Summary of leaks
-- Different parts:
-    - Long term keys
-    - ClientESNI, XXX
-    - ServerESNI, XXX
+\subsection{Formal Model}
+
+In this section, we present a model for ESNI based on ProVerif \cite{28,32}. ProVerif analyzes symbolic protocol
+models using processes to represent entities which communicate using messages sent over public channels. Processes
+can trigger security events representing attacks or critical steps of the target protocol, e.g., TLS connection establishment.
+Moreover, processes can save messages in lookup tables for use later on. This is useful for storing long-term keying
+material, such as ESNI and certificate private keys. 
+
+Our ESNI model accounts for backward and forward binding. It also accounts for action indistinguishability for client
+and server processes. It does not account for message indistinguishability, as this is something largely determined
+by configuration. 
+
+\subsubsection{Long Term Secrets}
+XXX
+
+\subsubsection{Client ESNI Process}
+XXX
+
+\subsubsection{Server ESNI Process}
+XXX
 
 \section{Summary of Proposals}
+
+There are two proposals that conform to the core ESNI protocol described above. They are
+summarized in the following sections.
 
 \subsection{ESNI Proxy Transformation}
 XXX
 
 \subsection{ESNI PSK Binders and Key Schedule Injection}
 XXX
+
+\subsection{Comparison}
+XXX: pros and cons
 
 \bibliographystyle{plain}
 \bibliography{references}
