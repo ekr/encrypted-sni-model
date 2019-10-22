@@ -25,6 +25,10 @@
 
 In this note we try formalize the privacy goals of Encrypted SNI \cite{ietf-tls-esni-04}.
 
+\section{Goals}
+
+\todo[inline]{writeme}
+
 \section{Notation}
 
 TLS is an authenticated key exchange protocol composed of sub-protocols. Importantly, TLS has
@@ -91,7 +95,7 @@ it returns publicly visible metadata associated from a handshake trace.
 Finally, we define a function $\mathsf{SNI}$ which takes as input a handshake trace $t$
 and returns the name $N$ which was used to generate $t$. 
 
-\section{Security Model}
+\section{Adversarial Model}
 
 In this section, we describe two variants of an ESNI adversary: passive and active. We derive 
 definitions from the classic ``find-and-choose'' notion of indistinguishability. Informally, 
@@ -164,9 +168,9 @@ and returns a handshake trace $H(N) \in \mathbf{H}$. The modified game, called $
 
 As before, we say that \adv\ wins $\mathsf{ActiveESNIGame}$ if it outputs $1$. 
 We define the advantage \adv\ has in this game as
-$|\Pr[\mathsf{ActiveESNIGame}(\lambda, \mathbf{N}, \mathsf{config}, \madv)] - \frac{1}{2}|$. And we say that a handshake trace
-is \emph{SNI agnostic} with respect to an active attacker if \adv's advantage in winning $\mathsf{ActiveESNIGame}$ is negligibly 
-small in $\lambda$.
+$|\Pr[\mathsf{ActiveESNIGame}(\lambda, \mathbf{N}, \mathsf{config}, \madv)] - \frac{1}{2}|$. 
+And we say that a handshake trace is \emph{SNI agnostic} with respect to an active attacker 
+if \adv's advantage in winning $\mathsf{ActiveESNIGame}$ is negligibly small in $\lambda$.
 
 Informally, \adv's advantage in these games depend on information leakage in handshake traces. 
 Taken to an extreme, if all ClientHello, ServerHello, and encrypted handshake traces were 
@@ -179,7 +183,7 @@ $\mathsf{GenerateCH}$ and $\mathsf{GenerateSH}$. The former takes as input a nam
 configuration, and produces a CH $m \in \mathbf{CH}$. We say $\mathsf{GenerateCH}$ is uniform
 if for all $CH_i, CH_j \gets \mathsf{GenerateCH}(N, cc)$ for XXX
 
-
+\section{ESNI Security}
 
 Beyond handshake trace indistinguishability, ESNI security and privacy requires basic assumptions
 about the secrecy of its encrypted contents. In particular, the contents of the ESNI extension must
@@ -191,8 +195,6 @@ ESNI contents are \emph{forward-bound} to a handshake if it is not possible to d
 without both the handshake shared secret and ESNI shared secret.
 \end{definition}
 
-% if ESNI security, then forrward bound
-% if not forrward bound, then not ESNI security // assume opposite, contradiction
 Forward binding restricts access to the traffic handshake secrets to the endpoints that possess both
 the ESNI shared secret and handshake Diffie Hellman shared secret. This property is necessary for 
 ESNI security. To illustrate this, consider the contrapositive towards a contradiction, wherein ESNI 
@@ -211,8 +213,6 @@ ESNI contents are \emph{backward-bound} to a ClientHello if it is not possible t
 any way without causing an ESNI check to fail.
 \end{definition}
 
-% if secure, then backward bound
-% if not backward bound, thhen not ESNI secure // assume opposite, contradiction
 Backward binding restricts an adversary's abilities to passive eavesdropping and active packet generation.
 To illustrate why this is necessary for ESNI security, consider, towards a contradiction, the contrapositive,
 which states that ESNI security is possible if there is no backward binding. Consider the following attack
@@ -225,19 +225,40 @@ the following attack which relies on tickets and resumption state. \adv\ connect
 with a guess name {\tt example.com}, and receives a ticket upon successful negotiation. A client then
 generates a ClientHello with an ESNI payload and no resumption PSK binder. \adv\ then attaches its ticket and 
 PSK binder to the ClientHello and forwards the result to the server. If the server checks that the name in 
-the ticket match that of the ESNI payload and behaves differently as a result, e.g., by completing the handshake
-without resumption or by aborting the connection, \adv\ learns information about the ESNI.
-
-
+the ticket matches that of the ESNI payload and behaves differently as a result, e.g., by completing the handshake
+without resumption or by aborting the connection, \adv\ learns information about the ESNI. This allows \adv\ to
+conduct a dictionary-like attack on victim ESNIs.
 
 \begin{theorem}
-If ESNI contents are \emph{backward-bound} to a ClientHello, then an adversary
+If ESNI is secure (as per one of the definitions above), then ESNI contents are \emph{backward-bound} and \emph{forward-bound}.
 \end{theorem}
 
-% \begin{theorem}
-% If ESNI contents are \emph{forward-bound} to a handshake and \emph{backward-bound} to the corresponding 
-% ClientHello, and if XXX
-% \end{theorem}
+%%% XXX(caw): prove this by counter example?
+
+\begin{theorem}
+If ESNI is secure (as per one of the definitions above), then handshake traces are SNI-agnostic.
+\end{theorem}
+
+%%% XXX(caw): prove by building a distinguisher?
+
+
+%%% goal: if forward and backward bound, and if SNI-agnostic, then ESNI is secure.
+% contradiction: if forward and backward bound and SNI-agnostic, then not ESNI secure
+% approach: 
+% - backward bound: adv can only generate CH messages // Query to Bind for GenerateCH output goes away since adv cannot modify victim (CHs+State)
+%    (Bind can be called with name CH that adv produces itself)
+%    (adv presents CH+{state}) to challenger)
+% - forward bound: adv cannot obtain name from handshake it did not generate // Query to Reveal on traces produced by GenerateCH goes away
+% - SNI-agnostic: adv is left with ability to forward CHs from GenerateCH and create its own and bind them
+
+% game hopping sequence:
+% game 0: the modified game above 
+% game 1: replace challenger trace with trace from random name // follows from IND of traces
+% --> adv outputs the *same* in both cases, so therefore the trace leaks nothing, and adv probability is no better than 1/2 + Pr[distinguish traces]
+
+%% Q: show that forward/backward bind in the game above, without them, lead to some attack. 
+% forward: adv can use its reveal query on trace to learn ESNI.
+% backward: maybe not part of the game?
 
 \bibliographystyle{plain}
 \bibliography{references}
