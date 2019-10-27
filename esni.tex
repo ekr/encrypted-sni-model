@@ -23,6 +23,9 @@
 
 \newenvironment{prog}{\begin{array}[t]{@{}l@{}}}{\end{array}}
 
+\theoremstyle{definition}
+\newtheorem{theorem}{Theorem}[section]
+
 \newcommand{\kwl}[1]{\mathbf{#1}}
 \newcommand{\kwf}[1]{\mathsf{#1}}
 \newcommand{\kwc}[1]{\mathsf{#1}}
@@ -802,7 +805,9 @@ That is, it returns publicly visible metadata associated from a handshake trace.
 Finally, we define a function $\mathsf{SNI}$ which takes as input a handshake trace $t$
 and returns the name $N$ which was used to generate $t$. 
 
-\subsection{Adversarial Model}
+\subsection{Passive Adversary}
+
+\todo[inline]{writeup new definition}
 
 In this section, we describe two variants of an ESNI adversary: passive and active. We derive 
 definitions from the classic ``find-and-choose'' notion of indistinguishability. Informally, 
@@ -882,6 +887,13 @@ if \adv's advantage in winning $\mathsf{ActiveESNIGame}$ is negligibly small in 
 % $\mathsf{GenerateCH}$ and $\mathsf{GenerateSH}$. The former takes as input a name and client
 % configuration, and produces a CH $m \in \mathbf{CH}$. We say $\mathsf{GenerateCH}$ is uniform
 % if for all $CH_i, CH_j \gets \mathsf{GenerateCH}(N, cc)$ for XXX
+
+\begin{theorem}
+If ESNI is secure (as per one of the definitions above), then ESNI contents are \emph{backward-bound} and \emph{forward-bound}.
+\end{theorem}
+\begin{theorem}
+If ESNI is secure (as per one of the definitions above), then handshake traces are SNI-agnostic.
+\end{theorem}
 
 \section{Summary of Proposals}
 
