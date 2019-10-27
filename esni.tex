@@ -1,4 +1,4 @@
-\documentclass[twoside]{article}
+\documentclass{article}
 
 \usepackage[utf8]{inputenc}
 \usepackage{comment}
@@ -22,6 +22,15 @@
 }
 
 \newenvironment{prog}{\begin{array}[t]{@{}l@{}}}{\end{array}}
+
+\newcommand{\kwl}[1]{\mathbf{#1}}
+\newcommand{\kwf}[1]{\mathsf{#1}}
+\newcommand{\kwc}[1]{\mathsf{#1}}
+\newcommand{\kwp}[1]{\mathsf{#1}}
+\newcommand{\kwt}[1]{\mathsf{#1}}
+\newcommand{\kwe}[1]{\mathsf{#1}}
+\newcommand{\kwtable}[1]{\mathsf{#1}}
+\newcommand{\var}[1]{\mathit{#1}}
 
 \newcommand{\adv}{{\sf Adv}}
 \newcommand{\madv}{\mathsf{Adv}}
@@ -200,7 +209,7 @@ Optional:
 
 \section{Introduction}
 
-The TLS Server Name Indication extension \cite{xxx} is an increasingly important part of the TLS protocol.
+The TLS Server Name Indication extension \cite{rfc6066} is an increasingly important part of the TLS protocol.
 Modern TLS server deployments often offer multiple certificates behind a single IP address. The SNI helps
 servers choose which certificate to choose for a given connection. However, this extension also leaks the 
 server name to any on-path observer. With recent pushes to encrypt DNS and protect names from such adversaries,
@@ -208,10 +217,19 @@ the SNI extension is a privacy problem for clients. The Encrypted SNI extension 
 to address this privacy problem by encrypting the SNI in transit. However, to date, asserting correctness and
 privacy properties of the protocol proved difficult. 
 
+\textbf{Core Protocol.} We capture the essence of ESNI in a \emph{core protocol}, which is a simplified variant
+of TLS that models TLS up to the receipt of the certificate message.
+
 \textbf{Formal Analysis.} We develop and present a ProVerif model of the core ESNI protocol to show that it
-achieves the desired secrecy and privacy properties. Extensions to account for server reaction attacks (see 
-Section \ref{sec:security}) are described, though not modelled, as there are multiple ways to build this property
-into the protocol.
+achieves the desired secrecy and privacy properties.  ProVerif analyzes symbolic protocol models using 
+processes to represent entities which communicate using messages sent over public channels. Processes
+can trigger security events representing attacks or critical steps of the target protocol, e.g., TLS connection establishment.
+Moreover, processes can save messages in lookup tables for use later on. This is useful for storing long-term keying
+material, such as ESNI and certificate private keys. Extensions to account for server reaction attacks 
+(see Section \ref{sec:security}) are described, though not modelled, as there are multiple ways to build 
+this property into the protocol. All models and code can be found online at \url{https://github.com/chris-wood/reftls}.
+
+\textbf{Game-Based Analysis.} We define a game-based definition of ESNI security to complement the symbolic model.
 
 \section{Encrypted SNI Overview}
 
@@ -232,12 +250,12 @@ for Encrypted SNI \cite{requirements}, described below:
   service provider.
   \item Do not introduce extra round trips: Encrypting the SNI must not come at the cost of 
   extra round trips. For example, one possible approach is to SNI-based certificate authentication
-  at the application protocol layer, e.g., using HTTP/2 Secondary Certificates \cite{xxx}, after
+  at the application protocol layer, e.g., using HTTP/2 Secondary Certificates \cite{ietf-httpbis-http2-secondary-certs-04}, after
   the TLS connection finishes and is authenticated with a ``public name.'' While this may work,
   the extra latency cost may be prohibitively expensive for certain clients.
   \item Forward secrecy: Ideally, SNI encryption would have some amount of forward secrecy.
   However, as SNI encryption cannot introduce additional round trips, forward secrecy is not
-  possible using public key encryption primitives such as ECIES \cite{XXX} or HPKE \cite{XXX}
+  possible using public key encryption primitives such as ECIES \cite{shoup2001proposal} or HPKE \cite{irtf-cfrg-hpke-00}
   \item Prevent SNI-based DoS attacks: A consequence of using public key encryption is that
   servers must perform a public key operation without having validated the client. HelloRetryRequests
   may help dampen the effects of DoS attacks, though these come at the cost of introducing
@@ -287,7 +305,7 @@ This means there are at least two necessary requirements for ESNI:
 %
 We may optionally want to hide the fact that ESNI was negotiated, as per the ``do not stick out'' goal. However, 
 this is primarily only deployment concern. Furthermore, we may also want to hide the fact that a client offered
-ESNI in its handshake. This may be useful for clients that wish to GREASE \cite{XXX} the extension.
+ESNI in its handshake. This may be useful for clients that wish to GREASE \cite{ietf-tls-grease-04} the extension.
 
 \subsection{Draft-04 Design Overview and Known Attacks} \label{sec:known-attacks}
 Figure \ref{fig:draft4} shows the ESNI design in draft-04 of the protocol. 
@@ -393,21 +411,21 @@ fully bound to the ClientHello, and (2) ESNI contents are not fully bound to the
 handshake. In the following section, we describe an ideal ESNI protocol that addresses these
 shortcomings.
 
-\section{Core Protocol} % Basic anonymous DH model (handshake secret integrity)
+\section{Core Protocol} \label{sec:core} % Basic anonymous DH model (handshake secret integrity)
 
 At its core, ESNI is a protocol between a client and server that works as described in
 Figure \ref{fig:simple-esni}. It aims to provide the following guarantees:
 %
 \begin{itemize}
-  \item Client: TLS handshake secret known by entity which has the private handshake key share (y), corresponding PSK,
+  \item {\bf Client Secrecy}. TLS handshake secret known by entity which has the private handshake key share (y), corresponding PSK,
   private ESNI decryption key, and ENSI nonce. 
-  \item Server: TLS handshake secret known by entity which has the private handshake key share (x), corresponding PSK,
+  \item {\bf Server Secrecy}. TLS handshake secret known by entity which has the private handshake key share (x), corresponding PSK,
   and ENSI nonce.
-  \item Client and server both agree on the same TLS handshake secret and transcript.
+  \item {\bf Agreement}. Client and server both agree on the same TLS handshake secret and transcript.
 \end{itemize}
 %
 
-Thus, the core protocol only models the handshake up to the point of certificate receipt. It does
+Thus, the core protocol only models the handshake \emph{up to the point of certificate receipt}. It does
 not capture the full TLS handshake. Moreover, the core protocol does not account for server reaction
 attacks, such as the one described in Section \ref{sec:security}. We treat cryptographic mitigation
 of this to an extension of the core protocol.
@@ -423,7 +441,7 @@ For presentation purposes, the core protocol uses the following helper routine:
 }
 \end{center}
 %
-For HelloRetryRequest flows, we also introduce a function $\mathsf{GenerateHRR}$ which 
+To support HelloRetryRequest flows, we also introduce a function $\mathsf{GenerateHRR}$ which 
 produces a HelloRetryRequest message $\mathsf{HRR}$ given a ClientHello $\mathsf{CH}$.
 
 % \begin{center}
@@ -554,33 +572,321 @@ among other things, the addition of a PSK binder where one was previously not pr
 Beyond backward and forward binding, it must also be the case that observable information, which includes 
 messages sent on the wire and the \emph{actions} of clients and servers using ESNI, does not leak information
 about the SNI. Indeed, the reaction attack described above was due in part to such an information 
-leak.\footnote{Fortunately, joint binding resolved the problem by removing a branch in the way servers
+leak.\footnote{Fortunately, backward binding resolves this problem by removing a branch in the way servers
 handle ClientHello messages.} We must capture this notion of information indistinguishability for completeness.
 We do so via \emph{message indistinguishability} and \emph{action indistinguishability}. Informally, message 
 indistinguishability means that all messages written on the wire do not vary based on SNI. Similarly, action
 indistinguishability means that all node behavior as observed by \adv\ does not vary based on SNI (or any SNI-influenced
-value used in the protocol).
+value used in the protocol). 
 
-\todo[inline]{add more rigorous definition of these}
-\todo[inline]{describe how message indistinguishability is a property of configuration, and give the functions discussed IRL}
+We do not currently model message indistinguishability. This is because it is mainly determined by configuration.
+For example, if a service provider partitions its names based on support ciphersuites, then ciphersuite
+selection may leak information about the SNI. (This also applies to clients, which may, in theory, use different
+ciphersuites, parameters, or extensions per domains.) Essentially, message indistinguishability requires that
+all parameter selection \emph{within} the same anonymity set is SNI-agnostic.
 
-\subsection{Formal Model}
+\section{Symbolic Model}
 
-We developed a model for the core ESNI protocol based on ProVerif \cite{28,32}. ProVerif analyzes symbolic protocol
-models using processes to represent entities which communicate using messages sent over public channels. Processes
-can trigger security events representing attacks or critical steps of the target protocol, e.g., TLS connection establishment.
-Moreover, processes can save messages in lookup tables for use later on. This is useful for storing long-term keying
-material, such as ESNI and certificate private keys. 
-
+We developed a model for the core ESNI protocol based on ProVerif \cite{blanchet2016modeling}. 
 The core model achieves the forward binding property. It does not account for backwards binding, nor does it
 account for message indistinguishability, as this is something largely determined by configuration. Each process 
 begins by installing or obtaining long-term secrets used each TLS connection. These secrets include public and 
 private certificate signing keys, as well as ESNI keying material.
 
+\begin{tabbing}
+$\kwl{event}\ \kwe{ESNIClientDone}(\kwt{bitstring}, \var{element}, \var{pubkey}). $\\
+$\kwl{event}\ \kwe{ESNIClientLeak}(\kwt{bitstring}, \var{element}, \var{pubkey}). $\\
+$\kwl{event}\ \kwe{ESNIServerLeak}(\kwt{bitstring}, \var{element}, \kwt{bitstring}). $\\
+$\kwl{event}\ \kwe{ESNIServerDone}(\kwt{bitstring}, \var{element}, \var{pubkey}). $\\
+$\textit{(*event Reachable(). *)} $\\
+$ $\\
+$\kwl{let}\ \var{ClientESNICore}() =  $\\
+$\ \ \ \ \ \kwl{in}(\var{io}, (\var{host}{:}\var{prin}, \var{origin{\_}host}{:}\var{prin})); $\\
+$\ \ \ \ \ \kwl{get}\ \var{esniKeys}( = \var{host},  = \var{StrongDH}, \var{xxx}, \var{gs})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{g} = \var{StrongDH}\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{sni} = \var{secret{\_}sni}(\var{origin{\_}host})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Derive ESNI keying material *)} $\\
+$\ \ \ \ \ \kwl{new}\ \var{cr}{:}\var{random}; $\\
+$\ \ \ \ \ \kwl{let}\ (\var{x}{:}\kwt{bitstring}, \var{gx}{:}\var{element}) = \var{dh{\_}keygen}(\var{g})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ (\var{c}{:}\kwt{bitstring}, \var{gc}{:}\var{element}) = \var{dh{\_}keygen}(\var{g})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{new}\ \var{sni{\_}nonce}{:}\var{random}; $\\
+$\ \ \ \ \ \kwl{let}\ \var{gcs} = \var{e2b}(\var{dh{\_}exp}(\var{g}, \var{gs}, \var{c}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kcs} = \var{hkdf{\_}extract}(\var{zero}, \var{gcs})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aek} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}key}, \var{random2b}(\var{cr}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aeiv} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}iv}, \var{random2b}(\var{cr}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Derive ESNI keying material *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{esni{\_}payload} = (\var{sni{\_}nonce}, \var{sni})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{enc{\_}sni} = \var{aead{\_}enc}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{e2b}(\var{gx}), \var{esni{\_}payload})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* The SNI extension carries the "public name", which is modelled }$\\
+$\textit{        here as the public key share of the public name *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{sni{\_}ext} = \var{SNI}(\var{e2b}(\var{gs}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* The ESNI extension carries the the client's ESNI key share}$\\
+$\textit{        and the encrypted SNI payload *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{esni{\_}ext} = \var{ESNI}(\var{g}, \var{gc}, \var{enc{\_}sni})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Write out the CH and get a HRR in response *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{ch} = (\var{cr}, \var{gx}, \var{sni{\_}ext}, \var{esni{\_}ext})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{out}(\var{io}, \var{ch}); $\\
+$\ \ \ \ \ \kwl{in}\ (\var{io}, (\var{hrr}{:}\kwt{bitstring})); $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Upon HRR, the ESNI payload does not change. Only the client's key shares change. *)} $\\
+$\ \ \ \ \ \kwl{new}\ \var{cr}{:}\var{random}; $\\
+$\ \ \ \ \ \kwl{let}\ (\var{x}{:}\kwt{bitstring}, \var{gx}{:}\var{element}) = \var{dh{\_}keygen}(\var{g})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ (\var{c}{:}\kwt{bitstring}, \var{gc}{:}\var{element}) = \var{dh{\_}keygen}(\var{g})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{gcs} = \var{e2b}(\var{dh{\_}exp}(\var{g}, \var{gs}, \var{c}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kcs} = \var{hkdf{\_}extract}(\var{zero}, \var{gcs})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aek} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}key}, \var{random2b}(\var{cr}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aeiv} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}iv}, \var{random2b}(\var{cr}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{enc{\_}sni} = \var{aead{\_}enc}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{e2b}(\var{gx}), (\var{sni{\_}nonce}, \var{sni}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{sni{\_}ext} = \var{SNI}(\var{e2b}(\var{gs}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{esni{\_}ext} = \var{ESNI}(\var{g}, \var{gc}, \var{enc{\_}sni})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Write out the CH and get a server flight in response *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{ch'} = (\var{cr}, \var{gx}, \var{sni{\_}ext}, \var{esni{\_}ext})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{out}(\var{io}, \var{ch'}); $\\
+$\ \ \ \ \ \kwl{in}\ (\var{io}, (\var{gy}{:}\var{element}, \var{msg}{:}\kwt{bitstring})); $\\
+$ $\\
+$\ \ \ \ \ \kwl{if}\ \var{gy}\neq\var{BadElement}\ \kwl{then} $\\
+$\ \ \ \ \ \kwl{let}\ \var{log} = (\var{ch}, \var{hrr}, \var{ch'}, \var{gy})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{gxy} = \var{e2b}(\var{dh{\_}exp}(\var{g}, \var{gy}, \var{x}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Derive the handshake secret as per normal. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kxy'} = \var{hkdf{\_}extract}(\var{zero}, \var{gxy})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Mix in the ESNI nonce. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kxy} = \var{hkdf{\_}extract}(\var{kxy'}, \var{random2b}(\var{sni{\_}nonce}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Derive remaining key material. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aek} = \var{hkdf{\_}expand{\_}label}(\var{kxy}, \var{tls13{\_}key}, \var{log})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aeiv} = \var{hkdf{\_}expand{\_}label}(\var{kxy}, \var{tls13{\_}iv}, \var{log})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Decrypt the server flight *)} $\\
+$\ \ \ \ \ \kwl{let}\ ((\var{recv{\_}sni}{:}\kwt{bitstring}, \var{p}{:}\var{pubkey}), \var{sig}{:}\kwt{bitstring}) = \var{aead{\_}dec}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{zero}, \var{msg})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{log} = (\var{log}, (\var{recv{\_}sni}, \var{p}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \kwl{event}\ \var{Reachable}(\var{log}); $\\
+$ $\\
+$\ \ \ \ \ \kwl{get}\ \var{longTermKeys}( = \var{origin{\_}host}, \var{xxxx}, \var{p})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{if}\ \var{recv{\_}sni} = \var{sni}\ \kwl{then}\ ( $\\
+$\ \ \ \ \ \ \kwl{if}\ \var{verify}(\var{p}, \var{log}, \var{sig}) = \kwc{true}\ \kwl{then} $\\
+$\ \ \ \ \ \ \ \ \ \kwl{event}\ \kwe{ESNIClientDone}(\var{sni}, \var{gs}, \var{p})) $\\
+$\ \ \ \ \ \kwl{else}\ ( $\\
+$\ \ \ \ \ \ \ \ \ \ \kwl{event}\ \kwe{ESNIClientLeak}(\var{sni}, \var{gs}, \var{p}); $\\
+$\ \ \ \ \ \ \kwl{out}(\var{io}, \var{sni})). $\\
+$ $\\
+$ $\\
+$\kwl{let}\ \var{ServerESNICore}() =  $\\
+$\ \ \ \ \ \kwl{in}(\var{io}, \var{host}{:}\var{prin}); $\\
+$\ \ \ \ \ \kwl{get}\ \var{esniKeys}( = \var{host},  = \var{StrongDH}, \var{s}, \var{gs})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{get}\ \var{longTermKeys}( = \var{host}, \var{sk}, \var{p})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{g} = \var{StrongDH}\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Read in a CH. *)} $\\
+$\ \ \ \ \ \kwl{in}(\var{io}, (\var{ch}{:}\kwt{bitstring})); $\\
+$\ \ \ \ \ \kwl{let}\ (\var{cr}{:}\var{random}, \var{gx}{:}\var{element}, \var{sni{\_}ext}{:}\var{sni}, \var{esni}{:}\var{sni}) = \var{ch}\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Decrypt the ESNI extension. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{ESNI}(\var{g}, \var{gc}, \var{enc{\_}sni}) = \var{esni}\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{if}\ \var{gx}\neq\var{BadElement}\ \kwl{then} $\\
+$\ \ \ \ \ \kwl{if}\ \var{gc}\neq\var{BadElement}\ \kwl{then} $\\
+$\ \ \ \ \ \kwl{let}\ \var{gcs} = \var{e2b}(\var{dh{\_}exp}(\var{g}, \var{gc}, \var{s}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kcs} = \var{hkdf{\_}extract}(\var{zero}, \var{gcs})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aek} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}key}, \var{random2b}(\var{cr}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aeiv} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}iv}, \var{random2b}(\var{cr}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ (\var{sni{\_}nonce}{:}\var{random}, \var{sni}{:}\kwt{bitstring}) =  $\\
+$\ \ \ \ \ \ \ \ \ \var{aead{\_}dec}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{e2b}(\var{gx}), \var{enc{\_}sni})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \kwl{let}\ \var{origin{\_}host} = \var{get{\_}host}(\var{global{\_}sni{\_}secret}(), \var{sni})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Produce a HRR, and then read another CH. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{hrr} = \var{zero}\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{out}\ (\var{io}, \var{hrr}); $\\
+$\ \ \ \ \ \kwl{in}\ (\var{io}, (\var{ch'}{:}\kwt{bitstring})); $\\
+$\ \ \ \ \ \kwl{let}\ (\var{cr'}{:}\var{random}, \var{gx'}{:}\var{element}, \var{sni{\_}ext'}{:}\var{sni}, \var{esni'}{:}\var{sni}) = \var{ch'}\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Decrypt the ESNI contents again. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{ESNI}(\var{g'}, \var{gc'}, \var{enc{\_}sni'}) = \var{esni'}\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{if}\ \var{gx'}\neq\var{BadElement}\ \kwl{then} $\\
+$\ \ \ \ \ \kwl{if}\ \var{gc'}\neq\var{BadElement}\ \kwl{then} $\\
+$\ \ \ \ \ \kwl{let}\ \var{gcs} = \var{e2b}(\var{dh{\_}exp}(\var{g'}, \var{gc'}, \var{s}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kcs} = \var{hkdf{\_}extract}(\var{zero}, \var{gcs})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aek} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}key}, \var{random2b}(\var{cr'}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aeiv} = \var{hkdf{\_}expand{\_}label}(\var{kcs}, \var{tls13{\_}esni{\_}iv}, \var{random2b}(\var{cr'}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ (\var{sni{\_}nonce'}{:}\var{random}, \var{sni'}{:}\kwt{bitstring}) =  $\\
+$\ \ \ \ \ \ \ \ \ \var{aead{\_}dec}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{e2b}(\var{gx'}), \var{enc{\_}sni'})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \kwl{let}\ \var{origin{\_}host} = \var{get{\_}host}(\var{global{\_}sni{\_}secret}(), \var{sni'})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \kwl{let}\ (\var{y}{:}\kwt{bitstring}, \var{gy}{:}\var{element}) = \var{dh{\_}keygen}(\var{g})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{log} = (\var{ch}, \var{hrr}, \var{ch'}, \var{gy})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{gxy} = \var{e2b}(\var{dh{\_}exp}(\var{g}, \var{gx'}, \var{y}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Derive the handshake secret as per normal. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kxy'} = \var{hkdf{\_}extract}(\var{zero}, \var{gxy})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Mix in the SNI nonce. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{kxy} = \var{hkdf{\_}extract}(\var{kxy'}, \var{random2b}(\var{sni{\_}nonce'}))\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Derive remaining key material. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aek} = \var{hkdf{\_}expand{\_}label}(\var{kxy}, \var{tls13{\_}key}, \var{log})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{aeiv} = \var{hkdf{\_}expand{\_}label}(\var{kxy}, \var{tls13{\_}iv}, \var{log})\ \kwl{in} $\\
+$ $\\
+$\ \ \ \ \ \textit{(* Encrypt the server flight, which includes the SNI (or would-be certificate) }$\\
+$\textit{        and signature over the transcript. *)} $\\
+$\ \ \ \ \ \kwl{let}\ \var{log} = (\var{log}, (\var{sni'}, \var{p}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{sig} = \var{sign}(\var{sk}, \var{log})\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{let}\ \var{enc{\_}sflt} = \var{aead{\_}enc}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{zero}, ((\var{sni'}, \var{p}), \var{sig}))\ \kwl{in} $\\
+$\ \ \ \ \ \kwl{out}(\var{io}, (\var{gy}, \var{enc{\_}sflt})); $\\
+$\ \ \ \ \ \kwl{event}\ \kwe{ESNIServerDone}(\var{sni}, \var{gs}, \var{p}). $\\
+$ $\\
+$\kwl{query}\ \var{h}{:}\kwt{bitstring}, \var{gs}{:}\var{element}, \var{p}{:}\var{pubkey}; $\\
+$\ \ \ \ \ \ \kwl{event}(\kwe{ESNIClientDone}(\var{h}, \var{gs}, \var{p})); $\\
+$\ \ \ \ \ \ \kwl{event}(\kwe{ESNIServerDone}(\var{h}, \var{gs}, \var{p})). $\\
+$ $\\
+$\kwl{query}\ \var{origin{\_}host}{:}\var{prin}, \var{h}{:}\kwt{bitstring}, \var{gs}{:}\var{element}, \var{p}{:}\var{pubkey}, \var{tkt}{:}\kwt{bitstring}; $\\
+$\ \ \ \ \ \ \var{attacker}(\var{secret{\_}sni}(\var{origin{\_}host})); $\\
+$\ \ \ \ \ \ \kwl{event}(\kwe{ESNIClientLeak}(\var{h}, \var{gs}, \var{p})); $\\
+$\ \ \ \ \ \ \kwl{event}(\kwe{ESNIServerLeak}(\var{h}, \var{gs}, \var{tkt})). $\\
+$ $\\
+$\kwl{query}\ \var{log}{:}\kwt{bitstring};\ \kwl{event}(\var{Reachable}(\var{log})). $\\
+$ $\\
+$\kwl{const}\ \kwc{C}{:}\var{prin}. $\\
+$\kwl{process} $\\
+$\ \ \ \ \ \kwl{new}\ \var{keyA}{:}\var{ae{\_}key}; $\\
+$\ \ \ \ \ \kwl{new}\ \var{keyB}{:}\var{ae{\_}key}; $\\
+$\ \ \ \ \ !\var{ClientESNICore}()\mid!\var{ServerESNICore}()\mid!\var{LongTermKeys}() $\\
+$$
+\end{tabbing}
+
+\section{Standard Model}
+
+Let $N \in \{0,1\}^{2^{16} - 1}$ be a name, and let $\mathbf{N}$ be the set of possible 
+names. ClientHello messages typically carry names as one of their parameters.
+Let $\mathsf{ClientConfig}$ be a set of parameters that determine a client's configuration,
+including supported ciphersuites, named groups, extensions, etc. 
+Let $\mathbf{CC}$ be the set of all client configuration parameters.
+Similarly, let $\mathsf{ServerConfig}$ be a set of parameters that determine a server's configuration,
+and let $\mathbf{SC}$ be the set of all client configuration parameters.
+Clients produce CH messages to a given server, identified by its name $N$, and configuration
+$\mathsf{ClientConfig}$, using a function $\mathsf{GenerateCH}: \mathbf{N} \times \mathbf{CC}$.
+Servers produce SH messages (and do other parameter selection) based on a CH message and 
+server configuration, using a function $\mathsf{GenerateSH}: \mathbf{CH} \times \mathbf{SC}$.
+
+The function $\mathsf{Metadata}$ takes as input a CH or SH and returns the set of metadata,
+or parameters, associated with the message, including the server name $N$, ciphersuite list,
+named groups, and other extensions that are visible on the wire. The function
+$\mathsf{PublicMetadata}$ returns the same output as $\mathsf{Metadata}$, except that
+the server name is omitted.
+
+Using the notation above, every handshake is a probabilistic function of some server name $N$,
+$\mathsf{ClientConfig}$, and $\mathsf{ServerConfig}$. In particular:
+%
+\begin{itemize}
+    \item A client generates a CH message using $N$ and $\mathsf{ClientConfig}$.
+    \item The recipient server generates a SH message using the input CH and $\mathsf{ServerConfig}$.
+    \item The remainder of the handshake contains encrypted handshake messages.
+\end{itemize}
+%
+Thus, let $\mathsf{Handshake}$ be a function that takes as input $N$,
+$cc = \mathsf{ClientConfig}$, and $sc = \mathsf{ServerConfig}$ and produces 
+a trace $t$ of messages $m_1, m_2, \dots$, where $m_1$ is a CH and $m_2$ is a SH.
+Let $\mathsf{PublicHandshake}$ be a similar function that computes 
+$t = m_1, m_2, \dots = \mathsf{Handshake}(t, cc, sc)$ 
+and returns $t^v = \mathsf{PublicMetadata}(m_1), \mathsf{PublicMetadata}(m_2), \dots$. 
+That is, it returns publicly visible metadata associated from a handshake trace. 
+
+Finally, we define a function $\mathsf{SNI}$ which takes as input a handshake trace $t$
+and returns the name $N$ which was used to generate $t$. 
+
+\subsection{Adversarial Model}
+
+In this section, we describe two variants of an ESNI adversary: passive and active. We derive 
+definitions from the classic ``find-and-choose'' notion of indistinguishability. Informally, 
+in each game, the adversary \adv\ is given information about a game and must present two options
+for the challenger. The challenger chooses one option at random and presents the result of some 
+operation applied to the selected option to \adv, who must then identify which of 
+the two options was selected. (This is typically the encryption of one message.) If the 
+\adv's advantage in making this selection is negligibly later than $0.5$, then the options 
+are indistinguishable under the challenger's operation.
+
+In porting this definition to ESNI, we seek to capture indistinguishability of handshake traces
+derived from names. That is, the challenger's operation is to generate a public handshake trace 
+based on a randomly chosen name. Specifically, \adv\ chooses two names $N_0$ and $N_1$ during
+a ``find'' phase, and presents them to the challenger $C$. $C$ then generates 
+$t_b^v = \mathsf{PublicHandshake}(N_b)$, where $b \gets \{0,1\}$, and presents this to \adv. 
+The adversary then presents its selection $b'$ to the challenger. The output of the game
+depends on whether or not $b = b'$. 
+
+We capture this definition in the following {\sf NameGame}, which is defined in Algorithm \ref{alg:esnigame}.
+
+\begin{algorithm}
+\caption{{\sf NameGame}} 
+\label{alg:esnigame}
+\begin{algorithmic}[1]
+  \STATE On input security parameter $\lambda$, $\mathbf{N}$, $\mathbf{CC}$, $\mathbf{SC}$, 
+  and adversary \adv\, a challenger $C$ initializes \adv\ with $\mathbf{CC}$, $\mathbf{SC}$, and $\mathsf{N}$. 
+  \STATE \adv\ presents the challenger with two distinct names $N_0$ and $N_1$, where $N_0 \not= N_1$.
+  \STATE $C$ chooses a random bit $b$ and returns $t_b^v = \mathsf{PublicHandshake}(N_b)$ to \adv.
+  \STATE \adv\ replies with a bit $b'$.
+  \STATE Output $1$ if $b = b'$, otherwise output $0$.
+\end{algorithmic}
+\end{algorithm}
+
+We say that \adv\ wins $\mathsf{NameGame}$ if it outputs $1$, i.e., if \adv\ was able to determine which
+name the challenger used to produce the challenge handshake trace. We define the advantage \adv\ has in this 
+game as $|\Pr[\mathsf{NameGame}(\lambda, \mathbf{N}, \mathbf{CC}, \mathbf{SC}, \madv)] - \frac{1}{2}|$. 
+
+We say that a handshake trace is \emph{SNI agnostic} if, for all PPT adversaries \adv, \adv's advantage in 
+winning $\mathsf{NameGame}$ is negligibly small in $\lambda$. 
+
+\subsection{Active Adversary}
+
+An active adversary has the ability to generate handshake traces at will. We assume servers are neither malicious nor compromised. 
+Therefore, adapting our model for privacy requires extending $\mathsf{NameGame}$ to give \adv\ an oracle for producing handshake
+traces with an SNI of its choosing. We define this oracle as $\mathcal{O}_H$, and it takes as input an SNI $N \in \mathbf{N}$
+and returns a handshake trace $H(N) \in \mathbf{H}$. The modified game, called $\mathsf{ActiveNameGame}$, proceeds as follows:
+
+\begin{algorithm}
+\caption{{\sf ActiveNameGame}} 
+\label{alg:active-esnigame}
+\begin{algorithmic}[1]
+  \STATE On input security parameter $\lambda$, $\mathbf{N}$, $\mathbf{CC}$, $\mathbf{SC}$, 
+  and adversary \adv\, a challenger $C$ initializes \adv\ with $\mathbf{CC}$, $\mathbf{SC}$, 
+  $\mathsf{N}$, and access to $\mathcal{O}_H$.
+  \STATE \adv\ queries $\mathcal{O}_H$ with names values of its choosing from $\mathbf{N}$ at most $\mathsf{poly}(\lambda)$ times.
+  \STATE \adv\ presents the challenger with two distinct names $N_0$ and $N_1$, where $N_0 \not= N_1$.
+  \STATE $C$ chooses a random bit $b$ and returns $t_b^v = \mathsf{PublicHandshake}(N_b)$ to \adv.
+  \STATE \adv\ continues querying $\mathcal{O}_H$ at most $\mathsf{poly}(\lambda)$ times.
+  \STATE \adv\ replies with a bit $b'$.
+  \STATE Output $1$ if $b = b'$, otherwise output $0$.
+\end{algorithmic}
+\end{algorithm}
+
+As before, we say that \adv\ wins $\mathsf{ActiveESNIGame}$ if it outputs $1$. 
+We define the advantage \adv\ has in this game as
+$|\Pr[\mathsf{ActiveESNIGame}(\lambda, \mathbf{N}, \mathsf{config}, \madv)] - \frac{1}{2}|$. 
+And we say that a handshake trace is \emph{SNI agnostic} with respect to an active attacker 
+if \adv's advantage in winning $\mathsf{ActiveESNIGame}$ is negligibly small in $\lambda$.
+
+% Informally, \adv's advantage in these games depend on information leakage in handshake traces. 
+% Taken to an extreme, if all ClientHello, ServerHello, and encrypted handshake traces were 
+% identical, i.e., statistically indistinguishable among the set of possible messages that comprise
+% a trace, for any SNI, then no (message size) leakage exists.\footnote{We do not consider time-based
+% side channels that may compromise ESNI privacy.} Thus, we aim to show that, if these message
+% distributions are identical, then a given handshake trace is SNI-agnostic. This requires some
+% definition of \emph{uniformity} for a given message distribution. Recall the definitions of 
+% $\mathsf{GenerateCH}$ and $\mathsf{GenerateSH}$. The former takes as input a name and client
+% configuration, and produces a CH $m \in \mathbf{CH}$. We say $\mathsf{GenerateCH}$ is uniform
+% if for all $CH_i, CH_j \gets \mathsf{GenerateCH}(N, cc)$ for XXX
+
 \section{Summary of Proposals}
 
-There are two proposals that conform to the core ESNI protocol described above. They are
-summarized below.
+There are two proposals that conform to the core ESNI protocol described in Section \ref{sec:core}. 
+They are summarized below.
 
 \textbf{ESNI Proxy Transformation}. A high level summary of this proposal is as follows:
 %
