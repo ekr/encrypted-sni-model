@@ -12,6 +12,14 @@
 \usepackage{algorithm,algorithmic}
 \usepackage{amsmath, amssymb, amsthm, amsfonts, caption, stmaryrd, mathtools, syntax, mdframed}
 \usepackage{cryptocode}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
 
 \newenvironment{prog}{\begin{array}[t]{@{}l@{}}}{\end{array}}
 
@@ -46,10 +54,10 @@
 \def\aenc#1#2{\mathsf{enc}^{#2}(#1)}
 \def\adec#1#2{\mathsf{dec}^{#2}(#1)}
 \def\mac#1#2{\mathsf{mac}^{#2}(#1)}
-\def\kdf#1{\mathsf{kdf}(#1)}
-\def\kdfpair#1#2{\mathsf{kdf}(#1, #2)}
-\def\kdfcontext#1#2{\mathsf{kdf}(#1,#2)}
-\def\dh#1#2{\mathsf{dh}(#1,#2)}
+\def\kdf#1{\mathsf{KDF}(#1)}
+\def\kdfpair#1#2{\mathsf{KDF}(#1, #2)}
+\def\kdfcontext#1#2{\mathsf{KDF}(#1,#2)}
+\def\dh#1#2{\mathsf{DH}(#1,#2)}
 \def\kdfi#1#2{\mathsf{kdf}_{#1}(#2)}
 \def\kdfz{\mathsf{kdf}_0}
 \def\hkdf#1{\mathsf{hkdf}(#1)}
@@ -88,6 +96,10 @@
 \def\ksni{g^s}
 \def\ksnipriv{s}
 
+\def\seal#1#2#3#4{\mathsf{AEADEncrypt}(#1,#2,#3,#4)}
+\def\open#1#2#3#4{\mathsf{AEADDecrypt}(#1,#2,#3,#4)}
+
+\def\esni{\mathsf{esni}}
 \def\esnikey{\mathtt{'esni key'}}
 \def\esniiv{\mathtt{'esni iv'}}
 \def\esnibinder{\mathtt{'esni binder'}}
@@ -96,7 +108,7 @@
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[section]
 
-\title{Encrypted SNI: Privacy and Security}
+\title{Formal Analysis of Encrypted SNI}
 \author{No Name}
 \date{\today}
 
@@ -242,6 +254,7 @@ for Encrypted SNI \cite{requirements}, described below:
   %\item Split server spoofing:
 \end{compactitem}
 %
+
 
 % \begin{figure}
 % \begin{minipage}[c]{.45\textwidth}
@@ -394,7 +407,9 @@ Figure \ref{fig:simple-esni}. It aims to provide the following guarantees:
 %
 
 Thus, the core protocol only models the handshake up to the point of certificate receipt. It does
-not capture the full TLS handshake. 
+not capture the full TLS handshake. Moreover, the core protocol does not account for server reaction
+attacks, such as the one described in Section \ref{sec:security}. We treat cryptographic mitigation
+of this to an extension of the core protocol.
 
 For presentation purposes, the core protocol uses the following helper routine:
 %
@@ -403,13 +418,12 @@ For presentation purposes, the core protocol uses the following helper routine:
 \procedure{$\mathsf{DeriveESNIKeys}(Zx)$}{%
   ek = \kdfcontext{zx}{\esnikey} \\
   eiv = \kdfcontext{zx}{\esniiv} \\
-  ebk = \kdfcontext{zx}{\esnibinder} \\
-  r = \kdfcontext{zx}{\esninonce} \\
-  \pcreturn ek, eiv, ebk, r}
+  \pcreturn ek, eiv, r}
 }
 \end{center}
 %
-{\sf Seal} and {\sf Open} are AEAD encryption and decryption functions, respectively.
+For HelloRetryRequest flows, we also introduce a function $\mathsf{GenerateHRR}$ which 
+produces a HelloRetryRequest message $\mathsf{HRR}$ given a ClientHello $\mathsf{CH}$.
 
 % \begin{center}
 % \fbox{
@@ -446,74 +460,94 @@ For presentation purposes, the core protocol uses the following helper routine:
   \action*{$\mathit{Knows}\ \ksnipriv, (\skp{S},\pkp{S})$}{sr}
   \nextlevel[2]
   \action*{\laction{Computes:}{
-    c \gets \Zp \\
+    x \gets \Zp, c \gets \Zp, r \gets \{0,1\}^{32} \\
     Zx = \dh{g^c}{\ksni} \\
-    ek, eiv, ebk, r = \mathsf{DeriveESNIKeys}(Zx) \\
-    \mathsf{CH} = (g^x, g^c, S, esni = \mathsf{Seal}(ek, eiv, (r, \sni)), \mathsf{Bind}(ebk, .))}}{cl}
+    ek, eiv = \mathsf{DeriveESNIKeys}(Zx) \\
+    \mathsf{CH} = (g^x, g^c, S, \esni = \seal{ek}{eiv}{g^x}{(r, \sni)})}}{cl}
   \nextlevel[6]
   \mess{$\mathsf{CH}$}{cl}{sr}
-  \nextlevel[2]
+  \nextlevel[1]
   \action*{\laction{Computes:}{
-    Zx = \dh{\ksni}{\ksnipriv} \\
-    ek, eiv, ebk, r = \mathsf{DeriveESNIKeys}(Zx) \\
-    (r', \sni') = \mathsf{Open}(ek, eiv, esni)}}{sr}
+    \mathsf{HRR} = \mathsf{GenerateHRR}(\mathsf{CH})}}{sr}
+  \nextlevel[3]
+  \mess{$\mathsf{HRR}$}{sr}{cl}
+  \nextlevel[1]
+  % \msccomment{start}{cl}
+  % \nextlevel[1]
+  \action*{\laction{Computes:}{
+    x' \gets \Zp, c' \gets \Zp \\
+    Zx' = \dh{g^{c'}}{\ksni} \\
+    ek', eiv' = \mathsf{DeriveESNIKeys}(Zx') \\
+    \mathsf{CH}' = (g^{x'}, g^{c'}, S, \esni' = \seal{ek'}{eiv'}{g^{x'}}{(r, \sni)})}}{cl}
   \nextlevel[6]
-  \action*{\laction{Verifies:}{
-    \mathsf{Verify}(ebk, \mathsf{CH}) \\ 
-    ss = \dh{g^y}{g^x} \\
+  \mess{$\mathsf{CH}'$}{cl}{sr}
+  \nextlevel[1]
+  \action*{\laction{Computes:}{
+    y \gets \Zp \\
+    Zx = \dh{\ksni}{g^c} \\
+    ek, eiv, r = \mathsf{DeriveESNIKeys}(Zx) \\
+    (r', \sni') = \open{ek}{eiv}{g^{x'}}{\esni'}) \\
+    ss = \dh{g^y}{g^{x'}} \\
     k' = \kdfpair{ss}{r} \\
     k = \kdfcontext{k'}{\mathtt{'handshake secret'}} \\
-    \mathsf{SH} = g^y, \mathsf{Cert} = \mathsf{Seal}(k, \cert(\sni))}}{sr}
-  \nextlevel[8]
+    \mathsf{SH} = (g^y, \mathsf{Cert} = \seal{k}{...}{...}{\cert(\sni)})}}{sr}
+  \nextlevel[10]
   \mess{$\mathsf{SH}, \mathsf{Cert}$}{sr}{cl}
-  \nextlevel
+  \nextlevel[1]
   \action*{\laction{Verifies:}{
     ss = \dh{g^x}{g^y} \\
     k' = \kdfpair{ss}{r} \\
     k = \kdfcontext{ss}{\mathtt{'handshake secret'}} \\ 
-    \cert'(\sni') = \mathsf{Open}(k, \mathsf{Cert}) \\
+    \cert'(\sni') = \open{k}{...}{...}{\mathsf{Cert}}) \\
     \mathsf{Equal}(\sni', \sni)}}{cl}
-  \nextlevel[5]
+  \nextlevel[6]
   \end{msc}
 }
 \end{center}
-\caption{Minimal Core ESNI Protocol. No resumption or HelloRetryRequest support.}
+\caption{Minimal Core ESNI Protocol without server reaction attack prevention.}
 \label{fig:simple-esni}
 \end{figure}
 
-Moreover, these guarantees must hold for all TLS handshake patterns, including: normal handshakes,
-resumption handshakes, and HelloRetryRequest handshakes. Considering the full variant, there are 
-five secrets that influence the handshake: private signing key $sk_s$, secret Diffie Hellman key shares $(x, y)$,
-pre-shared key(s) $\mathsf{psk}$, ESNI decryption key ($s$), and the ESNI nonce $r$. Informally, we require that
-these values endorse each other in order to avoid the attacks described in Section \ref{sec:known-attacks}.
+\fbox{
+The HRR path generates a fresh key share rather than re-using the value from the first ClientHello. 
+The key share can only be re-used if the key derivation changes, e.g., with a different label 
+to {\tt HKDF-Expand}, since this otherwise leads to encryption key and nonce re-use. The core protocol
+only requires that the client key share is bound to the ESNI contents. There are multiple ways to 
+achieve this property. 
+}
 
-For example, consider the ticket-based server reaction attack, wherein the ESNI nonce is not bound 
-to a ClientHello PSK. This leads to a situation wherein a server receives a ClientHello with an 
-attacker-controlled PSK meant for one SNI, yet an ESNI carrying an encryption of a different SNI. 
-If said server then \emph{checks} that these SNIs for equality and reacts differently in response, 
-the SNI value may leak. However, if these values are properly bound, then such a check will not 
-possible yield a negative answer (for honestly generated ClientHello messages), and therefore the 
-reaction attack vanishes.
+The core protocol achieves what we call \emph{forward binding} of the handshake to the ESNI 
+shared secret, even in the event of HRR. This means that knowledge of both ESNI secret(s) 
+and one of the TLS key shares is needed to derive the handshake secrets. 
 
-\subsection{Necessary Properties}
+As a consequence of forward binding and the need to interoperate with ESNI-incapable servers, 
+we also require a signalling mechanism for clients to determine whether or not the ESNI contents were 
+used to protect the handshake secret. (Trial decryption is always an option, though other more practical 
+solutions exist.)
 
-Joint binding of these secrets yields the following properties:
+The core protocol described above is \emph{not} secure against server reaction attacks.
+Specifically, it allows an on-path adversary to tamper with a ClientHello with no
+binder in flight. Recall that the ticket-based server reaction attack relies on servers
+behaving differently if the ESNI contents do not match that of the ticket contents.
+In general, though, this type of reaction attack is possible in all cases where a server
+performs SNI-specific behavior on unauthenticated fields in the ClientHello. 
+
+There are at least two ways to mitigate this problem:
 %
 \begin{itemize}
-  \item Backward binding: ESNI contents are bound to the entire ClientHello such that any modification
-  is detectable by servers. ESNI contents are \emph{backward bound} to a ClientHello if it is not possible 
-  to modify a CH in any way without causing an ESNI check to fail.
-  \item Forward binding: TLS handshake secrets are bound to the ESNI contents such that knowledge of both
-  ESNI secret(s) and one of the TLS key shares is needed to derive the handshake secrets. ESNI is \emph{forward
-  bound} if it is not possible to learn the TLS handshake secret without both the Diffie Hellman shared secret and 
-  ESNI shared secret.
+  \item Require that servers not implement any SNI-specific check on unauthenticated fields
+  in the ClientHello. This requires no protocol change, yet may be fragile in practice.
+  \item Use ESNI to authenticate the entire ClientHello. This requires a protocol change.
 \end{itemize}
 %
-As a consequence of forward binding and the need to interoperate with ESNI-incapable servers, we also require 
-a signalling mechanism for clients to determine whether or not the ESNI contents were used to protect the 
-handshake secret. (Trial decryption is always an option, though other more practical solutions exist.)
 
-Beyond these critical properties, it must also be the case that observable information, which includes 
+For safety reasons, the second option seems prudent. Thus, to mitigate server reaction attacks,
+we require the ESNI contents to authenticate the ClientHello, or to be backward bound to the 
+handshake. ESNI contents are \emph{backward bound} to a ClientHello if it is not possible 
+to modify a ClientHello in any way without causing an ESNI check to fail. This modification includes,
+among other things, the addition of a PSK binder where one was previously not present.
+
+Beyond backward and forward binding, it must also be the case that observable information, which includes 
 messages sent on the wire and the \emph{actions} of clients and servers using ESNI, does not leak information
 about the SNI. Indeed, the reaction attack described above was due in part to such an information 
 leak.\footnote{Fortunately, joint binding resolved the problem by removing a branch in the way servers
@@ -539,10 +573,10 @@ and server processes. It does not account for message indistinguishability, as t
 by configuration. Each process begins by installing or obtaining long-term secrets used each TLS connection. These secrets
 include public and private certificate signing keys, as well as ESNI keying material.
 
-\subsubsection{Client ESNI Process}
+\subsubsection{Core Client ESNI Process}
 XXX
 
-\subsubsection{Server ESNI Process}
+\subsubsection{Core Server ESNI Process}
 XXX
 
 \section{Summary of Proposals}
@@ -559,20 +593,22 @@ summarized below.
   ClientHelo with the SNI extension replaced with the ESNI extension. 
   \item Bind the ESNI contents to the handshake by choosing either the ``public'' or reconstructed
   ``private'' ClientHello to mix into the transcript. 
-  \item Never send an ESNI extension in the event of HRR.
+  \item Do not send an ESNI extension in the event of HRR.
 \end{itemize}
 %
 It has the following properties:
 %
 \begin{itemize}
-  \item[$+$] XXX
+  \item[$+$] ClientHello messages sent in response to HelloRetryRequest messages do not carry an ESNI
+  extension, which means that servers must maintain state about which SNI was chosen from the first ClientHello.
   \item[$-$] The transcript used upon ESNI negotiation is not that which is sent over the wire. This is
   a significant deviation from the TLS 1.3 model and introduces interesting side effects, such as the
   ability of an unknown third party, e.g., a backend origin server, to complete the handshake without
   the client being aware. (This is a problem in TLS in general, as secret information can always be
   exfiltrated to another party to complete the handshake.)
   \item[$-$] Treats the handshake transcript, which is fed into the TLS key schedule as the {\tt Info}
-  parameter to {\tt HKDF-Expand}, as secret information. HKDF leaks no information about this parameter
+  parameter to {\tt HKDF-Expand}, as secret information. (In contrast, the normal transcript in TLS 1.3
+  is composed of public information.) Note that HKDF leaks no information about this parameter
   if modelled as a random oracle or if the key is secret. More generally, PRFs have no guarantees about
   the secrecy of their inputs if the key is known. Importantly, in this proposal, an attacker
   does know the key in the event of HRR, yet the input is secret. Bellare and Lysyanskaya \cite{bellare2015symmetric}
@@ -588,13 +624,16 @@ It has the following properties:
   \item Bind the ESNI contents to the entire ClientHello with an explicit PSK binder, whose value is
   derived from the ESNI shared secret.
   \item Bind the ESNI contents to the handshake by mixing the derived ESNI nonce into the key schedule.
-  \item Always generate and send a fresh ESNI extension, even in the event of HRR.
+  \item Always generate and send an ESNI extension. In the event of HRR, the contents of this ESNI 
+  extension are identical to that of the first ClientHello.
 \end{itemize}
 %
 It has the following properties:
 %
 \begin{itemize}
   \item[$+$] Backward binding relies on existing PSK binder properties.
+  \item[$+$] HelloRetryRequest contents do not change across ClientHello messages, simplifying server
+  implementations.
   \item[$-$] Forward binding requires key schedule modification.
   \item[$-$] In the event of session resumption, two binders are added to a ClientHello and both
   must be verified by the server. This goes against text in the TLS 1.3 specification \cite{rfc8446}, 
