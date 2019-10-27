@@ -208,9 +208,10 @@ the SNI extension is a privacy problem for clients. The Encrypted SNI extension 
 to address this privacy problem by encrypting the SNI in transit. However, to date, asserting correctness and
 privacy properties of the protocol proved difficult. 
 
-\textbf{Formal Analysis.} \todo[inline]{writeme}
-
-\textbf{Contributions.} \todo[inline]{writeme}
+\textbf{Formal Analysis.} We develop and present a ProVerif model of the core ESNI protocol to show that it
+achieves the desired secrecy and privacy properties. Extensions to account for server reaction attacks (see 
+Section \ref{sec:security}) are described, though not modelled, as there are multiple ways to build this property
+into the protocol.
 
 \section{Encrypted SNI Overview}
 
@@ -508,12 +509,15 @@ produces a HelloRetryRequest message $\mathsf{HRR}$ given a ClientHello $\mathsf
 \label{fig:simple-esni}
 \end{figure}
 
-\fbox{
+\noindent\fbox{%
+    \parbox{\textwidth}{%
 The HRR path generates a fresh key share rather than re-using the value from the first ClientHello. 
 The key share can only be re-used if the key derivation changes, e.g., with a different label 
 to {\tt HKDF-Expand}, since this otherwise leads to encryption key and nonce re-use. The core protocol
 only requires that the client key share is bound to the ESNI contents. There are multiple ways to 
-achieve this property. 
+achieve this property. The ideal solution is one in which \emph{ESNI contents do not change
+across ClientHello messages}.
+    }%
 }
 
 The core protocol achieves what we call \emph{forward binding} of the handshake to the ESNI 
@@ -562,22 +566,16 @@ value used in the protocol).
 
 \subsection{Formal Model}
 
-In this section, we present a model for ESNI based on ProVerif \cite{28,32}. ProVerif analyzes symbolic protocol
+We developed a model for the core ESNI protocol based on ProVerif \cite{28,32}. ProVerif analyzes symbolic protocol
 models using processes to represent entities which communicate using messages sent over public channels. Processes
 can trigger security events representing attacks or critical steps of the target protocol, e.g., TLS connection establishment.
 Moreover, processes can save messages in lookup tables for use later on. This is useful for storing long-term keying
 material, such as ESNI and certificate private keys. 
 
-Our ESNI model accounts for backward and forward binding. It also accounts for action indistinguishability for client
-and server processes. It does not account for message indistinguishability, as this is something largely determined
-by configuration. Each process begins by installing or obtaining long-term secrets used each TLS connection. These secrets
-include public and private certificate signing keys, as well as ESNI keying material.
-
-\subsubsection{Core Client ESNI Process}
-XXX
-
-\subsubsection{Core Server ESNI Process}
-XXX
+The core model achieves the forward binding property. It does not account for backwards binding, nor does it
+account for message indistinguishability, as this is something largely determined by configuration. Each process 
+begins by installing or obtaining long-term secrets used each TLS connection. These secrets include public and 
+private certificate signing keys, as well as ESNI keying material.
 
 \section{Summary of Proposals}
 
