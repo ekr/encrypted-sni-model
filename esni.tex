@@ -395,7 +395,7 @@ an adversary can use these differences to learn information about the client's S
 key share and ESNI extension in the second ClientHello. Servers are expected to use the ESNI value
 from the same ClientHello from which it received the client key shares. However, a server may use
 mix and match these values, e.g., by selecting the ESNI value from the first ClientHello and the key
-shares from the second ClientHello.\footnote{This is not entirely farfetched, as some operators must
+shares from the second ClientHello.\footnote{This is not entirely far-fetched, as some operators must
 process the SNI upon the first ClientHello in order to determine HelloRetryRequest parameters such
 as supported ciphersuites.} This allows an on-path adversary to hijack a HelloRetryRequest, send a
 second ClientHello with its own key shares, and then successfully decrypt the server flight to learn
@@ -420,10 +420,10 @@ At its core, ESNI is a protocol between a client and server that works as descri
 Figure \ref{fig:simple-esni}. It aims to provide the following guarantees:
 %
 \begin{itemize}
-  \item {\bf Client Secrecy}. TLS handshake secret known by entity which has the private handshake key share (y), corresponding PSK,
-  private ESNI decryption key, and ENSI nonce. 
-  \item {\bf Server Secrecy}. TLS handshake secret known by entity which has the private handshake key share (x), corresponding PSK,
-  and ENSI nonce.
+  \item {\bf Client Secrecy}. TLS handshake secret known by entity which has the private handshake key 
+  share (y), corresponding PSK, private ESNI decryption key, and ENSI nonce. 
+  \item {\bf Server Secrecy}. TLS handshake secret known by entity which has the private handshake key 
+  share (x), corresponding PSK, and ENSI nonce.
   \item {\bf Agreement}. Client and server both agree on the same TLS handshake secret and transcript.
 \end{itemize}
 %
@@ -431,21 +431,9 @@ Figure \ref{fig:simple-esni}. It aims to provide the following guarantees:
 Thus, the core protocol only models the handshake \emph{up to the point of certificate receipt}. It does
 not capture the full TLS handshake. Moreover, the core protocol does not account for server reaction
 attacks, such as the one described in Section \ref{sec:security}. We treat cryptographic mitigation
-of this to an extension of the core protocol.
-
-For presentation purposes, the core protocol uses the following helper routine:
-%
-\begin{center}
-\fbox{
-\procedure{$\mathsf{DeriveESNIKeys}(Zx)$}{%
-  ek = \kdfcontext{zx}{\esnikey} \\
-  eiv = \kdfcontext{zx}{\esniiv} \\
-  \pcreturn ek, eiv, r}
-}
-\end{center}
-%
-To support HelloRetryRequest flows, we also introduce a function $\mathsf{GenerateHRR}$ which 
-produces a HelloRetryRequest message $\mathsf{HRR}$ given a ClientHello $\mathsf{CH}$.
+of this to an extension of the core protocol. To support HelloRetryRequest flows, we also introduce a 
+function $\mathsf{GenerateHRR}$ which produces a HelloRetryRequest message $\mathsf{HRR}$ given a 
+ClientHello $\mathsf{CH}$.
 
 % \begin{center}
 % \fbox{
@@ -482,11 +470,9 @@ produces a HelloRetryRequest message $\mathsf{HRR}$ given a ClientHello $\mathsf
   \action*{$\mathit{Knows}\ \ksnipriv, (\skp{S},\pkp{S})$}{sr}
   \nextlevel[2]
   \action*{\laction{Computes:}{
-    x \gets \Zp, c \gets \Zp, r \gets \{0,1\}^{32} \\
-    Zx = \dh{g^c}{\ksni} \\
-    ek, eiv = \mathsf{DeriveESNIKeys}(Zx) \\
-    \mathsf{CH} = (g^x, g^c, S, \esni = \seal{ek}{eiv}{g^x}{(r, \sni)})}}{cl}
-  \nextlevel[6]
+    x \gets \Zp, r \gets \{0,1\}^{32} \\
+    \mathsf{CH} = (g^x, S, \esni = \mathsf{HPKESeal}(\ksni, (r, \sni))}}{cl}
+  \nextlevel[4]
   \mess{$\mathsf{CH}$}{cl}{sr}
   \nextlevel[1]
   \action*{\laction{Computes:}{
@@ -497,23 +483,19 @@ produces a HelloRetryRequest message $\mathsf{HRR}$ given a ClientHello $\mathsf
   % \msccomment{start}{cl}
   % \nextlevel[1]
   \action*{\laction{Computes:}{
-    x' \gets \Zp, c' \gets \Zp \\
-    Zx' = \dh{g^{c'}}{\ksni} \\
-    ek', eiv' = \mathsf{DeriveESNIKeys}(Zx') \\
-    \mathsf{CH}' = (g^{x'}, g^{c'}, S, \esni' = \seal{ek'}{eiv'}{g^{x'}}{(r, \sni)})}}{cl}
-  \nextlevel[6]
+    x' \gets \Zp \\
+    \mathsf{CH}' = (g^{x'}, S, \esni)}}{cl}
+  \nextlevel[4]
   \mess{$\mathsf{CH}'$}{cl}{sr}
   \nextlevel[1]
   \action*{\laction{Computes:}{
     y \gets \Zp \\
-    Zx = \dh{\ksni}{g^c} \\
-    ek, eiv, r = \mathsf{DeriveESNIKeys}(Zx) \\
-    (r', \sni') = \open{ek}{eiv}{g^{x'}}{\esni'}) \\
+    (r', \sni') = \mathsf{HPKEOpen}(\ksnipriv, \esni)) \\
     ss = \dh{g^y}{g^{x'}} \\
     k' = \kdfpair{ss}{r} \\
     k = \kdfcontext{k'}{\mathtt{'handshake secret'}} \\
     \mathsf{SH} = (g^y, \mathsf{Cert} = \seal{k}{...}{...}{\cert(\sni)})}}{sr}
-  \nextlevel[10]
+  \nextlevel[8]
   \mess{$\mathsf{SH}, \mathsf{Cert}$}{sr}{cl}
   \nextlevel[1]
   \action*{\laction{Verifies:}{
@@ -888,12 +870,15 @@ if \adv's advantage in winning $\mathsf{ActiveESNIGame}$ is negligibly small in 
 % configuration, and produces a CH $m \in \mathbf{CH}$. We say $\mathsf{GenerateCH}$ is uniform
 % if for all $CH_i, CH_j \gets \mathsf{GenerateCH}(N, cc)$ for XXX
 
-\begin{theorem}
-If ESNI is secure (as per one of the definitions above), then ESNI contents are \emph{backward-bound} and \emph{forward-bound}.
-\end{theorem}
-\begin{theorem}
-If ESNI is secure (as per one of the definitions above), then handshake traces are SNI-agnostic.
-\end{theorem}
+
+
+
+% \begin{theorem}
+% If ESNI is secure (as per one of the definitions above), then ESNI contents are \emph{backward-bound} and \emph{forward-bound}.
+% \end{theorem}
+% \begin{theorem}
+% If ESNI is secure (as per one of the definitions above), then handshake traces are SNI-agnostic.
+% \end{theorem}
 
 \section{Summary of Proposals}
 
