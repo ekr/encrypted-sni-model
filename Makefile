@@ -1,8 +1,8 @@
 all:
-	pdflatex esni.tex
-	pdflatex esni.tex
-	bibtex esni
-	pdflatex esni.tex
+	pdflatex esni_analysis.tex
+	pdflatex esni_analysis.tex
+	bibtex esni_analysis
+	pdflatex esni_analysis.tex
 
 clean:
-	rm *.pdf *.aux *.bbl *.blg
+	rm *.pdf *.aux *.bbl *.blg *.log
