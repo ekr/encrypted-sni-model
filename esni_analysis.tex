@@ -230,7 +230,7 @@ processes to represent entities which communicate using messages sent over publi
 can trigger security events representing attacks or critical steps of the target protocol, e.g., TLS connection establishment.
 Moreover, processes can save messages in lookup tables for use later on. This is useful for storing long-term keying
 material, such as ESNI and certificate private keys. Extensions to account for server reaction attacks 
-(see Section \ref{sec:security}) are described, though not modelled, as there are multiple ways to build 
+(see Section \ref{sec:security}) are described, though not modeled, as there are multiple ways to build 
 this property into the protocol. All models and code can be found online at \url{https://github.com/chris-wood/reftls}.
 
 \textbf{Game-Based Analysis.} We define a game-based definition of ESNI security to complement the symbolic model.
@@ -577,7 +577,7 @@ $\ \ \ \ \ \textit{(* Derive ESNI keying material *)} $\\
 $\ \ \ \ \ \kwl{let}\ \var{esni{\_}payload} = (\var{sni{\_}nonce}, \var{sni})\ \kwl{in} $\\
 $\ \ \ \ \ \kwl{let}\ \var{enc{\_}sni} = \var{aead{\_}enc}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{zero}, \var{esni{\_}payload})\ \kwl{in} $\\
 $ $\\
-$\ \ \ \ \ \textit{(* The SNI extension carries the "public name", which is modelled }$\\
+$\ \ \ \ \ \textit{(* The SNI extension carries the "public name", which is modeled }$\\
 $\textit{        here as the public key share of the public name *)} $\\
 $\ \ \ \ \ \kwl{let}\ \var{sni{\_}ext} = \var{SNI}(\var{e2b}(\var{gs}))\ \kwl{in} $\\
 $ $\\
@@ -793,7 +793,7 @@ $\ \ \ \ \ \kwl{let}\ (\var{x2}{:}\kwt{bitstring}, \var{gx2}{:}\var{element}) = 
 $\ \ \ \ \ \kwl{let}\ \var{private{\_}ch} = (\var{gx2}, \var{sni})\ \kwl{in} $\\
 $\ \ \ \ \ \kwl{let}\ \var{tunnel{\_}ch} = \var{aead{\_}enc}(\var{StrongAE}, \var{b2ae}(\var{aek}), \var{aeiv}, \var{zero}, \var{private{\_}ch})\ \kwl{in} $\\
 $ $\\
-$\ \ \ \ \ \textit{(* The SNI extension carries the "public name", which is modelled }$\\
+$\ \ \ \ \ \textit{(* The SNI extension carries the "public name", which is modeled }$\\
 $\textit{        here as the public key share of the public name *)} $\\
 $\ \ \ \ \ \kwl{let}\ \var{sni{\_}ext} = \var{SNI}(\var{e2b}(\var{gs}))\ \kwl{in} $\\
 $ $\\
@@ -982,7 +982,7 @@ It has the following properties:
   \item[$-$] Treats the handshake transcript, which is fed into the TLS key schedule as the {\tt Info}
   parameter to {\tt HKDF-Expand}, as secret information. (In contrast, the normal transcript in TLS 1.3
   is composed of public information.) Note that HKDF leaks no information about this parameter
-  if modelled as a random oracle or if the key is secret. More generally, PRFs have no guarantees about
+  if modeled as a random oracle or if the key is secret. More generally, PRFs have no guarantees about
   the secrecy of their inputs if the key is known. Importantly, in this proposal, an attacker
   does know the key in the event of HRR, yet the input is secret. Bellare and Lysyanskaya \cite{bellare2015symmetric}
   proved that HMAC satisfies the notion of a dualPRF, which roughly states that HMAC is a PRF if 
