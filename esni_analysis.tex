@@ -312,7 +312,7 @@ this is primarily only deployment concern. Furthermore, we may also want to hide
 ESNI in its handshake. This may be useful for clients that wish to GREASE \cite{ietf-tls-grease-04} the extension.
 
 \subsection{Draft-04 Design Overview and Known Attacks} \label{sec:known-attacks}
-Figure \ref{fig:draft4} shows the ESNI design in draft-04 of the protocol. 
+Figure \ref{fig:draft4} shows the ESNI design in draft-04 of the protocol.
 
 \begin{figure}[th!]
 \begin{center}
@@ -1032,6 +1032,80 @@ It has the following properties:
   which states that servers ``SHOULD NOT attempt to validate multiple binders.''
 \end{itemize}
 %
+
+\appendix
+
+\section{Attack Flows}
+\label{sec:attack-flows}
+
+Here is the basic HRR attack flow. I'm using somewhat different
+notation, specifically:
+
+\def\kpubsni{\mathsf{K_{sni}^{pub}}}
+\def\kprivsni{\mathsf{K_{sni}^{priv}}}
+
+\begin{itemize}
+\item $\kpubsni$ -- the public HPKE encryption key for SNI
+\item $\kprivsni$ -- the private HPKI encryption key for SNI  
+\end{itemize}
+
+\begin{figure}[th!]
+\begin{center}
+\resizebox{0.8\columnwidth}{!}{\begin{msc}{}
+  \drawframe{none}
+  \setlength{\topheaddist}{0cm}
+  \setlength{\instdist}{10.5cm}
+  \setlength{\instwidth}{1.75cm}
+  \declinst{cl}{}{Client $C$}
+  \declinst{at}{}{Att. $A$}
+  \declinst{sr}{}{Server $S$}
+  \action*{$\mathit{Knows}\ \sni, \kpubsni$}{cl}
+  \action*{$\mathit{Knows}\ \kprivsni$}{sr}
+  \nextlevel[2]
+  \nextlevel
+  \mess{\emph{ClientHello1:} ($g^x, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^x)$)}{cl}{sr}
+  \nextlevel[2]
+  \mess{\emph{HRR:} (...)}{sr}{cl}
+  \nextlevel[2]
+  \mess{\emph{ClientHello2:} ($g^{x'}, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^{x'})$)}{cl}{at}
+  \nextlevel[2]
+  \mess{\emph{ClientHello2:} ($g^{a}, \mathsf{Enc}(\kpubsni, (dummysni, dummynonce), g^{a})$)}{at}{sr}
+  \nextlevel    
+  \action*{\laction{Derive Keys:}{
+    ss = \dh{g^a}{g^y} \\
+  }}{sr}
+  \nextlevel[4]
+  \mess{\emph{Second Flight:} SH, $\mathsf{Enc}(ss, (EE=dummynonce, CERT=Cert, ...))$}{sr}{at}
+  \nextlevel[2]
+  \action*{\laction{Derive Keys:}{
+    ss = \dh{g^a}{g^y} \\
+  }}{at}
+  \nextlevel[4]
+  \action*{\laction{Decrypt Cert:}{
+    CERT = \mathsf{Dec}(ss, ...) \\
+  }}{at}
+  \nextlevel[4]
+  
+  \end{msc}
+}
+
+This reveals the basic source of the problem: in order to prevent
+mix-and-match attacks on the client's key share, the ESNI encryption
+binds in $g^x$, but if the server uses the SNI from CH1 and then
+the key share from CH2, then the attacker is free to generate
+their own ESNI extension containing a bogus ESNI and nonce. The
+server correctly verifies that these correspond to $g^a$ but because
+these are all supplied by the attacker, this check succeeds and
+the server encrypts the certificate to the attacker with a key
+known to the attacker.
+
+
+
+
+\end{center}
+\caption{Simple ESNI Protocol without resumption or HelloRetryRequest support.}
+\label{fig:draft4}
+\end{figure}
 
 \bibliographystyle{plain}
 \bibliography{references}
