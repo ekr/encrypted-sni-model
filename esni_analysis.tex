@@ -1038,6 +1038,10 @@ It has the following properties:
 \section{Attack Flows}
 \label{sec:attack-flows}
 
+\subsection{HRR Attack}
+\label{sec:hrr-attack}
+
+
 Here is the basic HRR attack flow. I'm using somewhat different
 notation, specifically:
 
@@ -1059,8 +1063,6 @@ notation, specifically:
   \declinst{cl}{}{Client $C$}
   \declinst{at}{}{Att. $A$}
   \declinst{sr}{}{Server $S$}
-  \action*{$\mathit{Knows}\ \sni, \kpubsni$}{cl}
-  \action*{$\mathit{Knows}\ \kprivsni$}{sr}
   \nextlevel[2]
   \nextlevel
   \mess{\emph{ClientHello1:} ($g^x, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^x)$)}{cl}{sr}
@@ -1072,13 +1074,15 @@ notation, specifically:
   \mess{\emph{ClientHello2:} ($g^{a}, \mathsf{Enc}(\kpubsni, (dummysni, dummynonce), g^{a})$)}{at}{sr}
   \nextlevel    
   \action*{\laction{Derive Keys:}{
-    ss = \dh{g^a}{g^y} \\
+      ss = \dh{g^a}{g^y} \\
+      hk = \kdf{ss} \\
   }}{sr}
-  \nextlevel[4]
+  \nextlevel[5]
   \mess{\emph{Second Flight:} SH, $\mathsf{Enc}(ss, (EE=dummynonce, CERT=Cert, ...))$}{sr}{at}
   \nextlevel[2]
   \action*{\laction{Derive Keys:}{
-    ss = \dh{g^a}{g^y} \\
+      ss = \dh{g^a}{g^y} \\
+      hk = \kdf{ss} \\      
   }}{at}
   \nextlevel[4]
   \action*{\laction{Decrypt Cert:}{
@@ -1088,6 +1092,10 @@ notation, specifically:
   
   \end{msc}
 }
+
+\end{center}
+\caption{HRR Attack.}
+\end{figure}
 
 This reveals the basic source of the problem: in order to prevent
 mix-and-match attacks on the client's key share, the ESNI encryption
@@ -1099,13 +1107,128 @@ these are all supplied by the attacker, this check succeeds and
 the server encrypts the certificate to the attacker with a key
 known to the attacker.
 
+With this in hand, let's examine why each of the variants
+described above prevents the attack. In each case, the
+attacker is unable to determine the handshake keys and
+therefore is not able to decrypt the certificate.
 
+\begin{itemize}
+\item The ``proxy transformation'' approach \emph{assumes} that
+  the server is going to use the CH1 SNI but then mixes in
+  the nonce from CH1. The result is that although the attacker
+  knows $ss$, he will not be able to determine the handshake
+  keys.
 
+\item The ``tunnel transformation'' approach is agnostic about
+  whether the server is going to use the CH1 SNI or the CH2
+  SNI. However, as with the proxy transformation approach,
+  the attacker does not know the nonce and therefore is unable
+  to determine the handshake keys.
+
+\item The ``key schedule injection'' approach is also agnostic
+  about whether the server uses the CH1 SNI or the CH2 SNI,
+  but because it injects secret information from the ESNI
+  encryption into the key schedule, the attacker is unable
+  to determine the handshake keys.
+\end{itemize}
+
+In the first two variants, the secrecy of the handshake
+keys is provided by having the transcript be secret.
+In the last variant, the secrecy of the handshake keys
+is provided by explicitly including secret information
+from the ESNI encryption into the key schedule. The diagram
+below shows this, The key step is that $hk$ is derived from
+$ss$ plus some secret, which is unknown to the attacker,
+and therefore the attacker is unable
+to rederive $hk$.
+
+\begin{figure}[th!]
+\begin{center}
+\resizebox{0.8\columnwidth}{!}{\begin{msc}{}
+  \drawframe{none}
+  \setlength{\topheaddist}{0cm}
+  \setlength{\instdist}{10.5cm}
+  \setlength{\instwidth}{1.75cm}
+  \declinst{cl}{}{Client $C$}
+  \declinst{at}{}{Att. $A$}
+  \declinst{sr}{}{Server $S$}
+  \nextlevel[2]
+  \nextlevel
+  \mess{\emph{ClientHello1:} ($g^x, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^x)$)}{cl}{sr}
+  \nextlevel[2]
+  \mess{\emph{HRR:} (...)}{sr}{cl}
+  \nextlevel[2]
+  \mess{\emph{ClientHello2:} ($g^{x'}, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^{x'})$)}{cl}{at}
+  \nextlevel[2]
+  \mess{\emph{ClientHello2:} ($g^{a}, \mathsf{Enc}(\kpubsni, (dummysni, dummynonce), g^{a})$)}{at}{sr}
+  \nextlevel    
+  \action*{\laction{Derive Keys:}{
+      ss = \dh{g^a}{g^y} \\
+      hk = \kdf{ss + secret} \\            
+  }}{sr}
+  \nextlevel[5]
+  \mess{\emph{Second Flight:} SH, $\mathsf{Enc}(ss, (EE=dummynonce, CERT=Cert, ...))$}{sr}{at}
+  \nextlevel[2]
+  \action*{\laction{Derive Keys:}{
+      ss = \dh{g^a}{g^y} \\
+      hk = \kdf{ss + ??} \\                  
+    }}{at}
+  \nextlevel[4]  
+  \end{msc}
+}
 
 \end{center}
-\caption{Simple ESNI Protocol without resumption or HelloRetryRequest support.}
-\label{fig:draft4}
+\caption{HRR Attack.}
 \end{figure}
+
+
+\subsection{Ticket Attack}
+\label{sec:ticket-attack}
+
+The ticket attack is effectively also a mix-and-match attack in which the
+attacker makes a connection to the server with a specific SNI and gets
+a ticket. It then attaches its own PSK/ticket combination to CH1 in place
+of the client's PSK/ticket (or empty PSK/ticket).
+
+\begin{figure}[th!]
+\begin{center}
+\resizebox{0.8\columnwidth}{!}{\begin{msc}{}
+  \drawframe{none}
+  \setlength{\topheaddist}{0cm}
+  \setlength{\instdist}{10.5cm}
+  \setlength{\instwidth}{1.75cm}
+  \declinst{cl}{}{Client $C$}
+  \declinst{at}{}{Att. $A$}
+  \declinst{sr}{}{Server $S$}
+  \nextlevel[2]
+  \nextlevel
+  \mess{\emph{ClientHello1:} ($g^x, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^x)$)}{cl}{at}
+  \nextlevel[2]  
+  \mess{\emph{ClientHello1:} ($g^x, \mathsf{Enc}(\kpubsni, (\sni, nonce), g^x)$, Ticket[SNI=X])}{at}{sr}
+  \nextlevel[2]
+  \action*{\laction{Compare SNIs:}{
+      \text{Accept ticket if} \sni \text{ matches } X}}{sr}
+  \nextlevel[4]
+  \mess{\emph{Second Flight:} SH, ...}{sr}{at}
+  \nextlevel[2]
+  \action*{\laction{Check for resumption:}{
+      \sni = X \text { if PSK accepted}}}{at}
+    \nextlevel[4]
+\end{msc}
+
+}
+
+This is really just a failure of binding: we're binding to too little
+of the ClientHello. All of the proposals prevent this attack in the
+same way: they bind the ESNI to the entire ClientHello. If the
+attacker attaches their own PSK, then this invalidates the binding,
+thus preventing the mix-and-match. None of this depends on the confidentiality
+of the CH.
+
+\end{center}
+\caption{Ticket Attack.}
+\end{figure}
+
 
 \bibliographystyle{plain}
 \bibliography{references}
